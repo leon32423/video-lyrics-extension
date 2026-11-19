@@ -1,0 +1,9 @@
+{
+    "name": "Video Lyrics Split-Screen",
+    "description": "Zeigt Musikvideos im Vollbild mit synchronisierten, leuchtenden Lyrics im Karaoke-Stil an.",
+    "main": "videoLyrics.js",
+    "readme": "README.md",
+    "authors": [
+        { "name": "z7leon", "url": "https://github.com/leon32423" }
+    ]
+}
