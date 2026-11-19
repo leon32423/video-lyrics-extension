@@ -17,11 +17,10 @@
     let syncInterval = null;
     let tick = 0;
 
-    let hostedVideo = null;
-    let hostedParent = null;
-    let hostedNext = null;
-    let hostedStyleAttr = null;
-    let hostedBadTicks = 0;
+    let currentHostedVideo = null;
+    let videoContainerOriginalParent = null;
+    let videoContainerOriginalSibling = null;
+    let videoOriginalStyle = "";
 
     let videoEnableAttempts = 0;
     let lastEnableClick = 0;
@@ -69,7 +68,7 @@
         }
         #vl-overlay.active { display: block; }
 
-        /* ───── Video: fest 1920x1080 ───── */
+        /* ───── Video: Passt sich der Auflösung an ───── */
         #vl-video-side {
             position: absolute;
             inset: 0;
@@ -82,14 +81,10 @@
 
         #vl-video-frame {
             position: relative;
-            width: 1920px;
-            height: 1080px;
-            max-width: 100vw;
-            max-height: 100vh;
-            aspect-ratio: 16 / 9;
+            width: 100vw;
+            height: 100vh;
             overflow: hidden;
             background: #000;
-            box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
         }
 
         #vl-video-frame video.vl-hosted-video {
@@ -99,23 +94,24 @@
             height: 100% !important;
             max-width: none !important;
             max-height: none !important;
-            object-fit: contain !important;
+            object-fit: cover !important; 
             transform: none !important;
             opacity: 1 !important;
             visibility: visible !important;
             display: block !important;
-            z-index: 1 !important;
+            z-index: 2 !important;
             margin: 0 !important;
             background: #000;
+            transition: opacity 0.3s ease;
         }
 
         #vl-native-video {
             position: absolute;
             inset: 0;
-            z-index: 1;
+            z-index: 2;
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             display: none;
             background: #000;
         }
@@ -124,11 +120,12 @@
         #vl-cover-only {
             position: absolute;
             inset: 0;
-            z-index: 0;
+            z-index: 1;
             display: flex;
             align-items: center;
             justify-content: center;
             background: radial-gradient(circle at 50% 45%, rgba(var(--vl-rgb), 0.68), rgba(8, 8, 8, 0.94) 74%);
+            transition: opacity 0.3s ease;
         }
         #vl-cover-only.hidden { display: none; }
         #vl-cover-art {
@@ -139,7 +136,7 @@
             box-shadow: 0 22px 55px rgba(0, 0, 0, 0.8), 0 0 42px rgba(var(--vl-rgb), 0.5);
         }
 
-        /* ───── Lyrics: Weicher Verlauf, kein Kasten, kein harter Rand ───── */
+        /* ───── Lyrics ───── */
         #vl-lyrics-side {
             position: absolute;
             top: 0;
@@ -177,13 +174,9 @@
 
             scrollbar-width: none;
         }
-        #vl-lyrics-side::-webkit-scrollbar { 
-            display: none; 
-            width: 0; 
-            height: 0;
-        }
+        #vl-lyrics-side::-webkit-scrollbar { display: none; }
 
-        /* Grundstil für alle Zeilen */
+        /* Lyrics Zeilen */
         .vl-line {
             font-size: 28px;
             font-weight: 800;
@@ -191,29 +184,15 @@
             cursor: pointer;
             transition: transform 0.25s ease, color 0.25s ease, filter 0.25s ease, text-shadow 0.25s ease;
             padding: 2px 0;
-            will-change: transform, filter, color;
             position: relative;
             text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
             filter: blur(0.6px);
             white-space: normal;
             word-break: break-word;
-            
-            /* Inaktive Zeilen: stark abgedunkelt */
             color: rgba(255, 255, 255, 0.22);
         }
-        
-        .vl-line:hover {
-            color: rgba(255, 255, 255, 0.6);
-            filter: blur(0px);
-        }
-        
-        .vl-line.plain {
-            color: rgba(255, 255, 255, 0.8);
-            cursor: default;
-            filter: none;
-        }
-
-        /* Aktive Zeile: Komplett hell */
+        .vl-line:hover { color: rgba(255, 255, 255, 0.6); filter: blur(0px); }
+        .vl-line.plain { color: rgba(255, 255, 255, 0.8); cursor: default; filter: none; }
         .vl-line.active {
             transform: scale(1.04);
             transform-origin: left;
@@ -228,7 +207,7 @@
             bottom: 20px;
             left: 20px;
             z-index: 20;
-            width: 380px;
+            width: 420px; /* Leicht verbreitert */
             max-width: calc(54vw - 40px);
             background: rgba(16, 16, 18, 0.62);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -242,137 +221,66 @@
             gap: 6px;
         }
 
-        #vl-pill-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-        }
-        #vl-pill-left {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            min-width: 0;
-        }
+        #vl-pill-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        #vl-pill-left { display: flex; align-items: center; gap: 4px; min-width: 0; }
         .vl-icon-btn {
-            background: transparent;
-            border: none;
-            color: rgba(255, 255, 255, 0.72);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 5px;
-            border-radius: 50%;
-            position: relative;
+            background: transparent; border: none; color: rgba(255, 255, 255, 0.72);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            padding: 5px; border-radius: 50%; position: relative;
             transition: color 0.15s, background 0.15s, transform 0.15s;
         }
-        .vl-icon-btn:hover {
-            color: #fff;
-            background: rgba(255, 255, 255, 0.08);
-            transform: scale(1.08);
-        }
+        .vl-icon-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); transform: scale(1.08); }
         .vl-icon-btn.active { color: var(--vl-accent); }
         .vl-icon-btn.active::after {
-            content: "";
-            position: absolute;
-            bottom: 0;
-            width: 3px;
-            height: 3px;
-            border-radius: 50%;
-            background: var(--vl-accent);
+            content: ""; position: absolute; bottom: 0; width: 3px; height: 3px;
+            border-radius: 50%; background: var(--vl-accent);
         }
         #vl-play-circle {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #fff;
-            color: #000;
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: transform 0.15s, box-shadow 0.15s;
+            width: 32px; height: 32px; border-radius: 50%; background: #fff; color: #000;
+            border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; transition: transform 0.15s, box-shadow 0.15s;
             box-shadow: 0 0 14px rgba(255,255,255,0.25);
         }
         #vl-play-circle:hover { transform: scale(1.08); box-shadow: 0 0 20px rgba(255,255,255,0.4); }
 
+        /* Der Track-Chip (Cover + Name) */
         #vl-track-chip {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.07);
-            border-radius: 10px;
-            padding: 3px 10px 3px 4px;
-            min-width: 0;
-            max-width: 170px;
+            display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.07);
+            border-radius: 10px; padding: 3px 10px 3px 4px; min-width: 0; 
+            max-width: 280px; /* Breiter, damit mehr vom Namen reinpasst */
             margin-left: 4px;
+            flex-shrink: 1; /* Darf schrumpfen, falls der Platz eng wird */
         }
-        #vl-chip-img {
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-        #vl-chip-title {
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        #vl-check-dot {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--vl-accent);
-            color: #000;
-            font-size: 10px;
-            font-weight: 900;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
+        #vl-chip-img { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+        
+        /* Songtitel */
+        #vl-chip-title { 
+            font-size: 12px; 
+            font-weight: 700; 
+            white-space: normal; /* Erlaubt Zeilenumbrüche */
+            word-break: break-word; /* Verhindert, dass lange Wörter überlaufen */
+            line-height: 1.2;
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            display: -webkit-box;
+            -webkit-line-clamp: 2; /* Maximal 2 Zeilen anzeigen */
+            -webkit-box-orient: vertical;
         }
 
-        #vl-pill-right {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-shrink: 0;
-        }
-        #vl-vol-range {
-            width: 60px;
-            accent-color: var(--vl-accent);
-            cursor: pointer;
-        }
+        /* Der Haken ist komplett entfernt */
+
+        #vl-pill-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        #vl-vol-range { width: 60px; accent-color: var(--vl-accent); cursor: pointer; }
 
         #vl-pill-bottom {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 10px;
-            color: rgba(255, 255, 255, 0.7);
-            font-variant-numeric: tabular-nums;
+            display: flex; align-items: center; gap: 8px; font-size: 10px;
+            color: rgba(255, 255, 255, 0.7); font-variant-numeric: tabular-nums;
         }
-        #vl-bar-bg {
-            flex: 1;
-            height: 3px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.18);
-            cursor: pointer;
-            overflow: hidden;
-        }
+        #vl-bar-bg { flex: 1; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); cursor: pointer; overflow: hidden; }
         #vl-bar-bg:hover { height: 5px; }
         #vl-bar-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--vl-accent), #fff);
-            border-radius: 999px;
-            transition: width 0.15s linear;
+            height: 100%; width: 0%; background: linear-gradient(90deg, var(--vl-accent), #fff);
+            border-radius: 999px; transition: width 0.15s linear;
         }
     `;
     document.head.appendChild(style);
@@ -410,14 +318,18 @@
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5V6.5a2 2 0 0 1 2-2h9M11.5 2.5l2 2-2 2M13.5 8.5v1a2 2 0 0 1-2 2h-9M4.5 13.5l-2-2 2-2"/></svg>
                     </button>
 
+                    <!-- Hier ist der Haken jetzt entfernt -->
                     <div id="vl-track-chip">
                         <img id="vl-chip-img" src="" alt="" />
                         <span id="vl-chip-title">Titel</span>
-                        <span id="vl-check-dot">✓</span>
                     </div>
                 </div>
 
                 <div id="vl-pill-right">
+                    <button class="vl-icon-btn" id="vl-fullscreen-btn" title="Vollbild (F11)">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
+                    </button>
+
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 6h2.5L8 3v10l-3.5-3H2z" fill="currentColor"/><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
                     <input type="range" id="vl-vol-range" min="0" max="1" step="0.02" value="1">
                 </div>
@@ -501,56 +413,55 @@
     }
 
     // ───────── Video-Handling ─────────
+    function getSpotifyVideo() {
+        const videos = Array.from(document.querySelectorAll("video")).filter(v => 
+            v !== canvasVideo && v.videoWidth > 0 && v.readyState >= 2
+        );
+        const musicVideo = videos.find(v => !v.loop && (!isFinite(v.duration) || v.duration > 45));
+        if (musicVideo) return musicVideo;
+        
+        const canvasVid = videos.find(v => v.loop && /^https?:/i.test(v.currentSrc || ""));
+        if (canvasVid) return canvasVid;
+        
+        return null;
+    }
+
     function hostVideo(v) {
-        if (hostedVideo === v) return;
+        if (currentHostedVideo === v) return;
         releaseVideo();
-        hostedVideo = v;
-        hostedParent = v.parentNode;
-        hostedNext = v.nextSibling;
-        hostedStyleAttr = v.getAttribute("style");
-        hostedBadTicks = 0;
-        videoFrame.insertBefore(v, canvasVideo);
+
+        currentHostedVideo = v;
+        
+        videoContainerOriginalParent = v.parentNode;
+        videoContainerOriginalSibling = v.nextSibling;
+        videoOriginalStyle = v.getAttribute("style") || "";
+
         v.classList.add("vl-hosted-video");
-        if (Spicetify.Player.isPlaying() && v.paused) v.play().catch(() => {});
+        videoFrame.insertBefore(v, canvasVideo);
+
+        if (Spicetify.Player.isPlaying() && v.paused) {
+            v.play().catch(() => {});
+        }
     }
 
     function releaseVideo() {
-        const v = hostedVideo;
+        const v = currentHostedVideo;
         if (!v) return;
-        hostedVideo = null;
+        
+        currentHostedVideo = null;
         v.classList.remove("vl-hosted-video");
-        if (hostedStyleAttr === null) v.removeAttribute("style");
-        else v.setAttribute("style", hostedStyleAttr);
+        v.setAttribute("style", videoOriginalStyle);
+
         try {
-            if (hostedParent && hostedParent.isConnected) {
-                const ref = hostedNext && hostedNext.parentNode === hostedParent ? hostedNext : null;
-                hostedParent.insertBefore(v, ref);
+            if (videoContainerOriginalParent && videoContainerOriginalParent.isConnected) {
+                const ref = videoContainerOriginalSibling && videoContainerOriginalSibling.parentNode === videoContainerOriginalParent 
+                            ? videoContainerOriginalSibling : null;
+                videoContainerOriginalParent.insertBefore(v, ref);
             }
         } catch (_) {}
-        hostedParent = null;
-        hostedNext = null;
-        hostedStyleAttr = null;
-    }
 
-    function otherVideos() {
-        return Array.from(document.querySelectorAll("video")).filter(v => v !== canvasVideo && v !== hostedVideo);
-    }
-
-    function findMusicVideo() {
-        return otherVideos().find(v =>
-            !v.loop &&
-            v.videoWidth > 0 &&
-            v.readyState >= 2 &&
-            (!isFinite(v.duration) || v.duration > 45)
-        ) || null;
-    }
-
-    function findCanvasVideo() {
-        return otherVideos().find(v =>
-            v.loop &&
-            v.videoWidth > 0 &&
-            /^https?:/i.test(v.currentSrc || "")
-        ) || null;
+        videoContainerOriginalParent = null;
+        videoContainerOriginalSibling = null;
     }
 
     function tryEnableVideoMode() {
@@ -572,6 +483,7 @@
     function showMode(mode) {
         coverOnly.classList.toggle("hidden", mode !== "cover");
         canvasVideo.classList.toggle("visible", mode === "canvas");
+        
         if (mode !== "canvas" && canvasVideo.getAttribute("src")) {
             canvasVideo.pause();
             canvasVideo.removeAttribute("src");
@@ -580,51 +492,71 @@
     }
 
     function syncMedia() {
-        if (hostedVideo) {
-            if (hostedVideo.videoWidth === 0 || hostedVideo.readyState === 0) hostedBadTicks++;
-            else hostedBadTicks = 0;
-            if (hostedBadTicks > 6) releaseVideo();
-            else {
-                if (Spicetify.Player.isPlaying() && hostedVideo.paused && !hostedVideo.ended) {
-                    hostedVideo.play().catch(() => {});
+        if (currentHostedVideo) {
+            if (currentHostedVideo.videoWidth === 0 || currentHostedVideo.readyState === 0) {
+                releaseVideo();
+            } else {
+                if (Spicetify.Player.isPlaying() && currentHostedVideo.paused && !currentHostedVideo.ended) {
+                    currentHostedVideo.play().catch(() => {});
                 }
                 showMode("music");
                 return;
             }
         }
 
-        const mv = findMusicVideo();
+        const mv = getSpotifyVideo();
         if (mv) {
-            hostVideo(mv);
-            showMode("music");
-            return;
-        }
-
-        tryEnableVideoMode();
-
-        if (USE_CANVAS_FALLBACK) {
-            const cv = findCanvasVideo();
-            if (cv) {
-                const url = cv.currentSrc;
+            if (mv.loop && /^https?:/i.test(mv.currentSrc || "")) {
+                const url = mv.currentSrc;
                 if (canvasVideo.getAttribute("src") !== url) canvasVideo.src = url;
                 if (Spicetify.Player.isPlaying()) canvasVideo.play().catch(() => {});
                 else canvasVideo.pause();
                 showMode("canvas");
-                return;
+            } else {
+                hostVideo(mv);
+                showMode("music");
             }
+            return;
         }
 
+        tryEnableVideoMode();
         showMode("cover");
     }
 
-    // ───────── Player-Buttons ─────────
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && isOpen) {
-            e.preventDefault();
-            toggleOverlay(false);
-        }
-    });
+    // ───────── Vollbild & Steuerung ─────────
+    function toggleFullscreen() {
+        try {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    if (Spicetify.Platform?.PlatformData?.app) {
+                        Spicetify.Platform.PlatformData.app.setFullscreen(true);
+                    }
+                });
+            } else {
+                document.exitFullscreen().catch(() => {
+                    if (Spicetify.Platform?.PlatformData?.app) {
+                        Spicetify.Platform.PlatformData.app.setFullscreen(false);
+                    }
+                });
+            }
+        } catch (err) {}
+    }
 
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "F11") {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleFullscreen();
+        }
+        if (e.key === "Escape" && isOpen) {
+            if (!document.fullscreenElement) {
+                e.preventDefault();
+                toggleOverlay(false);
+            }
+        }
+    }, true);
+
+    document.getElementById("vl-fullscreen-btn").onclick = toggleFullscreen;
     document.getElementById("vl-prev-btn").onclick = () => Spicetify.Player.back();
     document.getElementById("vl-next-btn").onclick = () => Spicetify.Player.next();
     document.getElementById("vl-play-circle").onclick = () => Spicetify.Player.togglePlay();
@@ -768,6 +700,7 @@
         const duration = item.duration?.milliseconds ?? Spicetify.Player.getDuration();
         const cover = toImgUrl(md.image_xlarge_url || md.image_large_url || md.image_url || item.images?.[0]?.url);
 
+        // Setzt den Songtitel (ohne Haken)
         document.getElementById("vl-chip-title").innerText = title;
         document.getElementById("vl-chip-img").src = cover;
         document.getElementById("vl-cover-art").src = cover;
@@ -805,7 +738,7 @@
                 document.getElementById("vl-bar-fill").style.width = `${(pos / dur) * 100}%`;
             }
             updateLyricsHighlight(pos);
-        }, 100); // Auf 100ms gesetzt, das reicht für flüssige Zeilenwechsel völlig aus
+        }, 100); 
     }
 
     // ───────── Overlay Toggle ─────────
@@ -823,6 +756,10 @@
             releaseVideo();
             showMode("cover");
             currentTrackUri = "";
+            
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
         }
     }
 
