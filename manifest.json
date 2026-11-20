@@ -1,6 +1,6 @@
 {
     "name": "Video Lyrics Split-Screen",
-    "description": "Zeigt Musikvideos im Vollbild mit synchronisierten, leuchtenden Lyrics im Karaoke-Stil an.",
+    "description": "Displays music videos in full screen with synchronized, illuminated lyrics in a karaoke style",
     "main": "videoLyrics.js",
     "readme": "README.md",
     "authors": [
