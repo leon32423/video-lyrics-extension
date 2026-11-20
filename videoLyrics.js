@@ -25,6 +25,12 @@
     let videoEnableAttempts = 0;
     let lastEnableClick = 0;
 
+    // NEU: Manueller Offset (in Millisekunden). 
+    let manualOffsetMs = 0; 
+
+    // NEU: Cache für die Lyrics, damit sie nicht verloren gehen, wenn das Video verschoben wird
+    let lyricsCache = {}; 
+
     // ───────── Styles ─────────
     const style = document.createElement("style");
     style.id = "vl-style";
@@ -68,7 +74,7 @@
         }
         #vl-overlay.active { display: block; }
 
-        /* ───── Video: Passt sich der Auflösung an ───── */
+        /* ───── Video ───── */
         #vl-video-side {
             position: absolute;
             inset: 0;
@@ -151,7 +157,6 @@
             gap: 22px;
             scroll-behavior: smooth;
             z-index: 5;
-
             background: linear-gradient(
                 90deg,
                 rgba(8, 8, 12, 0) 0%,
@@ -159,10 +164,8 @@
                 rgba(8, 8, 12, 0.42) 55%,
                 rgba(8, 8, 12, 0.58) 100%
             );
-
             backdrop-filter: blur(22px) saturate(130%);
             -webkit-backdrop-filter: blur(22px) saturate(130%);
-
             -webkit-mask-image:
                 linear-gradient(90deg, transparent 0%, #000 18%, #000 82%, transparent 100%),
                 linear-gradient(180deg, transparent 0%, #000 12%, #000 82%, transparent 100%);
@@ -171,12 +174,10 @@
                 linear-gradient(90deg, transparent 0%, #000 18%, #000 82%, transparent 100%),
                 linear-gradient(180deg, transparent 0%, #000 12%, #000 82%, transparent 100%);
             mask-composite: intersect;
-
             scrollbar-width: none;
         }
         #vl-lyrics-side::-webkit-scrollbar { display: none; }
 
-        /* Lyrics Zeilen */
         .vl-line {
             font-size: 28px;
             font-weight: 800;
@@ -207,7 +208,7 @@
             bottom: 20px;
             left: 20px;
             z-index: 20;
-            width: 420px; /* Leicht verbreitert */
+            width: 420px;
             max-width: calc(54vw - 40px);
             background: rgba(16, 16, 18, 0.62);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -243,31 +244,27 @@
         }
         #vl-play-circle:hover { transform: scale(1.08); box-shadow: 0 0 20px rgba(255,255,255,0.4); }
 
-        /* Der Track-Chip (Cover + Name) */
         #vl-track-chip {
             display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.07);
             border-radius: 10px; padding: 3px 10px 3px 4px; min-width: 0; 
-            max-width: 280px; /* Breiter, damit mehr vom Namen reinpasst */
+            max-width: 280px;
             margin-left: 4px;
-            flex-shrink: 1; /* Darf schrumpfen, falls der Platz eng wird */
+            flex-shrink: 1;
         }
         #vl-chip-img { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
         
-        /* Songtitel */
         #vl-chip-title { 
             font-size: 12px; 
             font-weight: 700; 
-            white-space: normal; /* Erlaubt Zeilenumbrüche */
-            word-break: break-word; /* Verhindert, dass lange Wörter überlaufen */
+            white-space: normal;
+            word-break: break-word;
             line-height: 1.2;
             overflow: hidden; 
             text-overflow: ellipsis; 
             display: -webkit-box;
-            -webkit-line-clamp: 2; /* Maximal 2 Zeilen anzeigen */
+            -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
         }
-
-        /* Der Haken ist komplett entfernt */
 
         #vl-pill-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
         #vl-vol-range { width: 60px; accent-color: var(--vl-accent); cursor: pointer; }
@@ -318,7 +315,6 @@
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5V6.5a2 2 0 0 1 2-2h9M11.5 2.5l2 2-2 2M13.5 8.5v1a2 2 0 0 1-2 2h-9M4.5 13.5l-2-2 2-2"/></svg>
                     </button>
 
-                    <!-- Hier ist der Haken jetzt entfernt -->
                     <div id="vl-track-chip">
                         <img id="vl-chip-img" src="" alt="" />
                         <span id="vl-chip-title">Titel</span>
@@ -326,6 +322,10 @@
                 </div>
 
                 <div id="vl-pill-right">
+                    <button class="vl-icon-btn" id="vl-sync-btn" title="Lyrics synchronisieren (Pfeiltasten)">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a4 4 0 0 0 0 8h8a4 4 0 0 0 0-8H8z"/><path d="M3 8h10"/><path d="M5 6l2 2-2 2"/></svg>
+                    </button>
+
                     <button class="vl-icon-btn" id="vl-fullscreen-btn" title="Vollbild (F11)">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
                     </button>
@@ -462,6 +462,7 @@
 
         videoContainerOriginalParent = null;
         videoContainerOriginalSibling = null;
+        manualOffsetMs = 0; 
     }
 
     function tryEnableVideoMode() {
@@ -548,6 +549,18 @@
             e.stopPropagation();
             toggleFullscreen();
         }
+        
+        if (isOpen && document.activeElement.tagName !== 'INPUT') {
+            if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                manualOffsetMs -= 500; 
+            }
+            if (e.key === "ArrowRight") {
+                e.preventDefault();
+                manualOffsetMs += 500; 
+            }
+        }
+
         if (e.key === "Escape" && isOpen) {
             if (!document.fullscreenElement) {
                 e.preventDefault();
@@ -573,6 +586,11 @@
         const rect = e.currentTarget.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         Spicetify.Player.seek(pct * Spicetify.Player.getDuration());
+    };
+
+    document.getElementById("vl-sync-btn").onclick = () => {
+        manualOffsetMs += 500;
+        if (manualOffsetMs > 2500) manualOffsetMs = -2500;
     };
 
     function syncPlayerButtons() {
@@ -627,6 +645,14 @@
     async function fetchLyrics(title, artist, durationMs) {
         const token = ++lyricsToken;
         lyricsData = [];
+        
+        // Prüfe zuerst den Cache
+        if (lyricsCache[title]) {
+            lyricsData = lyricsCache[title].data;
+            renderLines(lyricsData, lyricsCache[title].synced);
+            return;
+        }
+
         renderLines(["Lade Lyrics..."], false);
 
         try {
@@ -649,9 +675,12 @@
 
             if (data?.syncedLyrics) {
                 lyricsData = parseSynced(data.syncedLyrics);
+                lyricsCache[title] = { data: lyricsData, synced: true }; // Cachen
                 renderLines(lyricsData, true);
             } else if (data?.plainLyrics) {
-                renderLines(data.plainLyrics.split("\n"), false);
+                const lines = data.plainLyrics.split("\n");
+                lyricsCache[title] = { data: lines, synced: false }; // Cachen
+                renderLines(lines, false);
             } else {
                 renderLines(["Keine Lyrics gefunden."], false);
             }
@@ -670,9 +699,12 @@
 
     function updateLyricsHighlight(pos) {
         if (!lyricsData.length || !lineEls.length) return;
+        
+        const adjustedPos = pos + manualOffsetMs;
+
         let idx = -1;
         for (let i = 0; i < lyricsData.length; i++) {
-            if (pos >= lyricsData[i].time) idx = i;
+            if (adjustedPos >= lyricsData[i].time) idx = i;
             else break;
         }
         
@@ -700,7 +732,6 @@
         const duration = item.duration?.milliseconds ?? Spicetify.Player.getDuration();
         const cover = toImgUrl(md.image_xlarge_url || md.image_large_url || md.image_url || item.images?.[0]?.url);
 
-        // Setzt den Songtitel (ohne Haken)
         document.getElementById("vl-chip-title").innerText = title;
         document.getElementById("vl-chip-img").src = cover;
         document.getElementById("vl-cover-art").src = cover;
@@ -737,6 +768,7 @@
             if (dur > 0) {
                 document.getElementById("vl-bar-fill").style.width = `${(pos / dur) * 100}%`;
             }
+            
             updateLyricsHighlight(pos);
         }, 100); 
     }
